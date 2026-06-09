@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinFlow Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #0f172a;
+    --surface:  #1e293b;
+    --surface2: #253047;
+    --border:   #334155;
+    --text:     #f1f5f9;
+    --muted:    #94a3b8;
+    --green:    #4ade80;
+    --red:      #f87171;
+    --blue:     #38bdf8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Noto Sans Thai", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .header h1 { font-size: 22px; font-weight: 700; }
+  select {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+  }
+  select:focus { border-color: var(--blue); }
+
+  /* ── Summary cards ── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 480px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 16px;
+  }
+  .card .label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .card .value { font-size: 26px; font-weight: 700; line-height: 1; }
+  .card .unit  { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .card.income  .value { color: var(--green); }
+  .card.expense .value { color: var(--red);   }
+  .card.balance .value { color: var(--blue);  }
+
+  /* ── Section box ── */
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 16px;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .section-title span { font-weight: 400; font-size: 13px; color: var(--muted); }
+
+  /* ── Bar chart ── */
+  .chart-wrap { position: relative; height: 230px; }
+  @media (max-width: 480px) { .chart-wrap { height: 180px; } }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 440px; }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .tx-income  { color: var(--green); font-weight: 600; white-space: nowrap; }
+  .tx-expense { color: var(--red);   font-weight: 600; white-space: nowrap; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--surface2);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .note-cell {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+
+  /* ── Delete button ── */
+  .btn-del {
+    background: transparent;
+    border: 1px solid rgba(248,113,113,.35);
+    color: var(--red);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  .btn-del:hover   { background: rgba(248,113,113,.12); border-color: var(--red); }
+  .btn-del:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── States ── */
+  .empty {
+    text-align: center;
+    padding: 36px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    margin: 60px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.5);
+    border: 1px solid var(--border);
+    transition: transform .25s ease;
+    z-index: 999;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 FinFlow</h1>
+  <select id="monthSelect"></select>
+</div>
+
+<div id="root"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SHEET_URL = "__SHEET_URL__";
+let allRows = [];
+let chartInst = null;
+
+/* ── Bootstrap ── */
+async function load() {
+  try {
+    const res = await fetch(SHEET_URL);
+    const data = await res.json();
+    allRows = Array.isArray(data) ? data : [];
+    if (!allRows.length) {
+      document.getElementById("root").innerHTML = '<div class="empty">ยังไม่มีรายการที่บันทึกไว้</div>';
+      return;
+    }
+    buildMonthSelect();
+    render(document.getElementById("monthSelect").value);
+  } catch (e) {
+    document.getElementById("root").innerHTML =
+      `<div class="empty">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;
+  }
+}
+
+/* ── Month selector ── */
+function buildMonthSelect() {
+  const months = [...new Set(allRows.map(r => String(r.date).slice(0, 7)))].sort().reverse();
+  const sel = document.getElementById("monthSelect");
+  sel.innerHTML = months.map(m => `<option value="${m}">${thMonth(m)}</option>`).join("");
+  sel.onchange = () => render(sel.value);
+}
+
+function thMonth(m) {
+  const [y, mo] = m.split("-");
+  const n = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+  return `${n[+mo]} ${+y + 543}`;
+}
+
+/* ── Main render ── */
+function render(month) {
+  const rows    = allRows.filter(r => String(r.date).startsWith(month));
+  const income  = sumAmt(rows.filter(r => r.type === "income"));
+  const expense = sumAmt(rows.filter(r => r.type === "expense"));
+
+  const cats = {};
+  rows.filter(r => r.type === "expense").forEach(r => {
+    cats[r.category] = (cats[r.category] || 0) + Number(r.amount);
+  });
+  const catEntries = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  const recent = [...rows].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 20);
+
+  document.getElementById("root").innerHTML = `
+    <div class="cards">
+      <div class="card income">
+        <div class="label">💚 รายรับ</div>
+        <div class="value">${fmt(income)}</div>
+        <div class="unit">บาท</div>
+      </div>
+      <div class="card expense">
+        <div class="label">❤️ รายจ่าย</div>
+        <div class="value">${fmt(expense)}</div>
+        <div class="unit">บาท</div>
+      </div>
+      <div class="card balance">
+        <div class="label">💙 คงเหลือ</div>
+        <div class="value">${fmt(income - expense)}</div>
+        <div class="unit">บาท</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">📂 รายจ่ายแยกหมวด</div>
+      ${catEntries.length
+        ? `<div class="chart-wrap"><canvas id="catChart"></canvas></div>`
+        : `<div class="empty">ยังไม่มีรายจ่ายเดือนนี้</div>`}
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        📋 รายการล่าสุด <span>(${rows.length} รายการ)</span>
+      </div>
+      ${recent.length ? `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                <th>หมวด</th>
+                <th>หมายเหตุ</th>
+                <th>จำนวน</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recent.map(r => `
+                <tr id="row-${esc(r.id)}">
+                  <td style="color:var(--muted);white-space:nowrap">${esc(r.date)}</td>
+                  <td><span class="badge">${esc(r.category)}</span></td>
+                  <td class="note-cell" title="${esc(r.note || "")}">${esc(r.note || "—")}</td>
+                  <td class="${r.type === "income" ? "tx-income" : "tx-expense"}">
+                    ${r.type === "income" ? "+" : "−"}${fmt(r.amount)}
+                  </td>
+                  <td>
+                    <button class="btn-del" onclick="deleteRow('${esc(r.id)}', this)">ลบ</button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : `<div class="empty">ยังไม่มีรายการ</div>`}
+    </div>
+  `;
+
+  if (catEntries.length) buildChart(catEntries);
+}
+
+/* ── Chart ── */
+const CHART_COLORS = [
+  "#818cf8","#f472b6","#fb923c","#34d399",
+  "#60a5fa","#a78bfa","#facc15","#f87171"
+];
+
+function buildChart(catEntries) {
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  const ctx = document.getElementById("catChart");
+  if (!ctx) return;
+
+  chartInst = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: catEntries.map(([k]) => k),
+      datasets: [{
+        data: catEntries.map(([, v]) => v),
+        backgroundColor: catEntries.map((_, i) => CHART_COLORS[i % CHART_COLORS.length] + "bb"),
+        borderColor:     catEntries.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => "  " + Number(ctx.raw).toLocaleString("th-TH") + " บาท"
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#94a3b8", font: { size: 12 } },
+          grid:  { color: "#33415540" }
+        },
+        y: {
+          ticks: {
+            color: "#94a3b8",
+            font: { size: 12 },
+            callback: v => v.toLocaleString("th-TH")
+          },
+          grid: { color: "#33415540" }
+        }
+      }
+    }
+  });
+}
+
+/* ── Delete ── */
+async function deleteRow(id, btn) {
+  if (!confirm("ลบรายการนี้?")) return;
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    const res = await fetch(SHEET_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", id })
+    });
+    const data = await res.json();
+    if (data.status === "error") {
+      showToast("⚠️ " + data.message);
+      btn.disabled = false;
+      btn.textContent = "ลบ";
+      return;
+    }
+    allRows = allRows.filter(r => String(r.id) !== String(id));
+    render(document.getElementById("monthSelect").value);
+    showToast("🗑️ ลบรายการแล้ว");
+  } catch (e) {
+    showToast("❌ ลบไม่สำเร็จ: " + e.message);
+    btn.disabled = false;
+    btn.textContent = "ลบ";
+  }
+}
+
+/* ── Helpers ── */
+function sumAmt(rows) { return rows.reduce((s, r) => s + Number(r.amount), 0); }
+function fmt(n)       { return Number(n).toLocaleString("th-TH"); }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])
+  );
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+load();
+</script>
+</body>
+</html>
